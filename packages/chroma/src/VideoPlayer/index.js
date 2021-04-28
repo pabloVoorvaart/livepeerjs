@@ -228,9 +228,9 @@ export default class VideoPlayer extends Component {
 
   constructor(props) {
     super(props);
-
     this.state = {
       levels: [],
+      sources: this.generateSourceArray(),
       currentLevel: -1,
     };
 
@@ -238,10 +238,32 @@ export default class VideoPlayer extends Component {
   }
 
   /**
+   * 
+   * @return {array} array of source object {src: "", status: ""} 
+   */
+  generateSourceArray() {
+    var sourceArray = []
+    //if(!this.props.sources) return [{url: this.src, status: "available"}]
+    for(var i = 0; i < this.props.sources.length; i++){
+      sourceArray.push({url: this.props.sources[i], status: "available"})
+    }
+    return sourceArray;
+  }
+
+
+  checkSources(){
+    console.info(this.state)
+    for( var i = 0; i < this.props.sources.length; i++){
+      console.info(this.state.sources[i].status)
+      if(this.state.sources[i].status === "available") return this.state.sources[i].url;
+    }
+  }
+
+  /**
    * get all available bitrates
    * @return {Array} array of res objects
    */
-  getLevels() {
+  getLevels() {eee
     if (this.source) {
       return this.source.getLevels();
     } else {
@@ -274,17 +296,50 @@ export default class VideoPlayer extends Component {
   }
 
   onLive(...args) {
-    this.setState({
-      levels: args[0].levels,
-      currentLevel: this.getCurrentLevel(),
-    });
+    console.info("pabloArgs", ...args)
+    // this.setState((state) => {
+    //   return {
+    //     levels: args[0].levels,
+    //     currentLevel: -1,
+    //     source: state.source
+    //   } 
+    // });
     // pass it along to onLive (check @livepeer/player/src/Channel/index.js)
     this.props.onLive(...args);
   }
 
+  onDead(data){
+  
+    
+    this.setState((state) => {
+      console.info(data.conext)
+      // Change source status to dead
+      for (var i in state.sources) {
+
+        if (state.sources[i].url == data.context.url) {
+          state.sources[i].status = "dead";
+           break; //Stop this loop, we found it!
+        }
+      }
+      console.info("onDead", state)
+      return {
+        levels: [],
+        currentLevel: -1,
+        sources: state.sources
+      } 
+    });
+  }
+
+  fetchSource(){
+    console.info("ActiveSource", this.checkSources())
+    return this.checkSources()
+  }
+
   render() {
+
+    const src = this.fetchSource();
+
     const {
-      src,
       onLive,
       onDead,
       autoPlay,
@@ -309,7 +364,7 @@ export default class VideoPlayer extends Component {
           }}
           isVideoChild
           onLive={this.onLive.bind(this)}
-          onDead={onDead}
+          onDead={this.onDead.bind(this)}
           autoPlay={autoPlay}
           src={src}
           type={getSourceType(src)}
@@ -432,6 +487,7 @@ export class Source extends Component {
    * Also reinitializes hls.js (if applicable) and any event listeners
    */
   updateSource = (): void => {
+
     const { hlsOptions, src, video } = this.props;
     const canPlayHLS = video.canPlayType("application/vnd.apple.mpegurl");
     const useHLSJS = Hls.isSupported() && !canPlayHLS;
@@ -603,7 +659,7 @@ export class Source extends Component {
    */
   onError = (e: string, data): void => {
     const { onDead } = this.props;
-    this.debug(e, data);
+    this.debug(e, data)
     if (!data.fatal) return;
     switch (data.details) {
       case Hls.ErrorDetails.INTERNAL_EXCEPTION:

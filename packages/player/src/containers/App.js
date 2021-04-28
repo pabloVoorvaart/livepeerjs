@@ -6,6 +6,7 @@ import {
   BrowserRouter as Router,
 } from "react-router-dom";
 import Landing from "../views/Landing";
+import Failover from "../views/Failover"
 import Channel from "../views/Channel";
 import Embed from "../views/Embed";
 import QueryHandler from "./QueryHandler";
@@ -14,6 +15,7 @@ const App = ({ location }) => (
   <Router>
     <Switch>
       <Route exact path="/" component={Landing} />
+      <Route exact path="/failover" component={Failover} />
       <Route
         exact
         path="/play"
