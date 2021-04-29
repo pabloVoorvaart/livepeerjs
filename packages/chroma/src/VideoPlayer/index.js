@@ -247,23 +247,37 @@ export default class VideoPlayer extends Component {
     for(var i = 0; i < this.props.sources.length; i++){
       sourceArray.push({url: this.props.sources[i], status: "available"})
     }
+
     return sourceArray;
   }
 
 
   checkSources(){
-    console.info(this.state)
     for( var i = 0; i < this.props.sources.length; i++){
-      console.info(this.state.sources[i].status)
       if(this.state.sources[i].status === "available") return this.state.sources[i].url;
     }
+    return null
   }
+
+
+  stateReset(){
+
+    setTimeout(() => 
+      this.setState(
+        {
+          levels: [],
+          currentLevel: -1,
+          sources: this.generateSourceArray()
+        })
+    , 5000)
+  }
+
 
   /**
    * get all available bitrates
    * @return {Array} array of res objects
    */
-  getLevels() {eee
+  getLevels() {
     if (this.source) {
       return this.source.getLevels();
     } else {
@@ -296,41 +310,50 @@ export default class VideoPlayer extends Component {
   }
 
   onLive(...args) {
-    console.info("pabloArgs", ...args)
-    // this.setState((state) => {
-    //   return {
-    //     levels: args[0].levels,
-    //     currentLevel: -1,
-    //     source: state.source
-    //   } 
-    // });
+    console.info("pabloArgs", args)
+    this.setState((state) => {
+      for(var i in state.sources){
+        if(state.sources[i].url.split("/")[4] === args[0].levels[0].url[0].split("/")[4]){
+          console.info(state.sources[i])
+          state.sources[i].status = "live"
+        }
+      }
+       return {
+         levels: args.length ? args[0].levels : [],
+         currentLevel: this.getCurrentLevel(),
+         sources: [...state.sources]
+       } 
+     });
     // pass it along to onLive (check @livepeer/player/src/Channel/index.js)
     this.props.onLive(...args);
   }
 
-  onDead(data){
-  
+  onSourceDeath(data){
     
     this.setState((state) => {
-      console.info(data.conext)
-      // Change source status to dead
-      for (var i in state.sources) {
-
-        if (state.sources[i].url == data.context.url) {
-          state.sources[i].status = "dead";
-           break; //Stop this loop, we found it!
+      console.info(state.sources[0].url.split("/")[4]);
+      console.info(state)
+      for(var i in state.sources){
+        if(state.sources[i].status === "live"){
+          state.sources[i].status = "dead"
         }
       }
-      console.info("onDead", state)
+      console.info("onDead", data)
       return {
         levels: [],
         currentLevel: -1,
-        sources: state.sources
+        sources: [...state.sources]
       } 
     });
+    //if no source is available
+    if(!this.checkSources()){
+      this.props.onDead();
+      this.stateReset();
+    } 
   }
 
   fetchSource(){
+    console.info("state info", this.state)
     console.info("ActiveSource", this.checkSources())
     return this.checkSources()
   }
@@ -364,7 +387,7 @@ export default class VideoPlayer extends Component {
           }}
           isVideoChild
           onLive={this.onLive.bind(this)}
-          onDead={this.onDead.bind(this)}
+          onDead={this.onSourceDeath.bind(this)}
           autoPlay={autoPlay}
           src={src}
           type={getSourceType(src)}
