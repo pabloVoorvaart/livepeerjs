@@ -9,15 +9,18 @@ export default class Failover extends Component {
     this.state = { live: null };
   }
   render() {
-    const { url, maxWidth = "100%", aspectRatio = "16:9" } = this.props;
+    const { maxWidth = "100%", aspectRatio = "16:9" } = this.props;
     const { live } = this.state;
-    const sources = ["https://cdn.livepeer.com/hls/ab0c6eiqq76lgto8/index.m3u8", "https://cdn.livepeer.com/hls/18cb94nlryoipvk1/index.m3u8"]
+    const sources = [
+      "https://cdn.livepeer.com/hls/2dc0d18iz3w1bjsr/index.m3u8",
+      "https://cdn.livepeer.com/hls/ab0c6eiqq76lgto8/index.m3u8",
+    ];
     return (
       <Media maxWidth={maxWidth}>
         <LoadingOverlay live={live} />
         <VideoPlayer
           autoPlay={true}
-          poster="https://iframes-shamaon.s3-eu-west-1.amazonaws.com/cartelas/catela_eres.png"
+          poster=""
           sources={sources}
           aspectRatio={aspectRatio}
           onLive={() => {

@@ -227,7 +227,7 @@ export default class VideoPlayer extends Component {
   };
 
   /**
-   *  state for sources is: available -> live -> dead
+   *  state for sources is: available -> dead
    *  We only play available
    */
   constructor(props) {
@@ -236,22 +236,24 @@ export default class VideoPlayer extends Component {
       levels: [],
       sources: this.generateSourceArray(),
       currentLevel: -1,
+      key: 0,
     };
 
-    // this.onLevels = this.onLevels.bind(this)
+    //this.onLevels = this.onLevels.bind(this)
   }
 
   /**
-   *
+   * If no sources props is passed, we will generate an array of single object
+   * {url: this.props.src, status: "available"}
    * @return {array} array of source object {src: "", status: "available"}
    */
   generateSourceArray() {
     var sourceArray = [];
-    //if(!this.props.sources) return [{url: this.src, status: "available"}]
+    if (!this.props.sources)
+      return [{ url: this.props.src, status: "available" }];
     for (var i = 0; i < this.props.sources.length; i++) {
       sourceArray.push({ url: this.props.sources[i], status: "available" });
     }
-    console.info("[pabloInfo]", JSON.stringify(sourceArray));
     return sourceArray;
   }
 
@@ -261,13 +263,18 @@ export default class VideoPlayer extends Component {
    * returns null if no source is available
    */
   checkSources() {
-    for (var i = 0; i < this.props.sources.length; i++) {
+    for (var i = 0; i < this.state.sources.length; i++) {
       if (this.state.sources[i].status === "available")
-        return this.state.sources[i].url;
+        console.info("[Failover] Src:", this.state.sources[i].url);
+      return this.state.sources[i].url;
     }
     return null;
   }
 
+  /**
+   * this function will intiailize the state to its original from, this will
+   * trigger a component rerender and the whole source cheking proces will start again.
+   */
   stateReset() {
     setTimeout(
       () =>
@@ -275,6 +282,7 @@ export default class VideoPlayer extends Component {
           levels: [],
           currentLevel: -1,
           sources: this.generateSourceArray(),
+          key: this.state.key + 1,
         }),
       5000
     );
@@ -316,25 +324,41 @@ export default class VideoPlayer extends Component {
     }
   }
 
-  onLive(src, ...args) {
-    console.info("[pabloInfo] incoming args", args);
+  /**
+   * Updated the state to include the levels array generated from the current playing source.
+   * @param  {...any} args
+   */
+  onLive(...args) {
+    console.info("[Failover] incoming args", args);
     this.setState((state) => {
       return {
         levels: args.length ? args[0].levels : [],
         currentLevel: this.getCurrentLevel(),
         sources: [...state.sources],
+        key: this.state.key,
       };
     });
     // pass it along to onLive (check @livepeer/player/src/Channel/index.js)
     this.props.onLive(...args);
   }
 
-  onDead(data) {
-    console.info("[pabloInfo]", "onDead Triggered");
+  /**
+   * On dead will be called when there is a critial error in the Source componet.
+   * Due to this error we can assue that the source that was being played is dead
+   * and so we switch its state to dead.
+   *
+   * If there are no sources with available state, we can props.onDead to display
+   * overlay component.
+   *
+   * Finally we can stateReset to reset the state. This Will allow us to keep checking
+   * if sources are active.
+   * @param {string} src
+   */
+  onDead(src) {
     this.setState((state) => {
       for (var i in state.sources) {
-        if (state.sources[i].url === data) {
-          console.info("[pabloInfo] setting stauts to dead", data);
+        if (state.sources[i].url === src) {
+          console.info("[Failover] setting stauts to dead", src);
           state.sources[i].status = "dead";
         }
       }
@@ -342,23 +366,18 @@ export default class VideoPlayer extends Component {
         levels: [],
         currentLevel: -1,
         sources: [...state.sources],
+        key: this.state.key,
       };
     });
     //if no source is available
     if (!this.checkSources()) {
       this.props.onDead();
-      //this.stateReset();
+      this.stateReset();
     }
   }
 
-  fetchSource() {
-    console.info("[pabloInfo] Src:", this.checkSources());
-    return this.checkSources();
-  }
-
   render() {
-    //console.info("[pabloInfo] Render:", JSON.stringify(this.state))
-    const src = this.fetchSource();
+    const src = this.checkSources();
 
     const {
       onLive,
@@ -369,7 +388,12 @@ export default class VideoPlayer extends Component {
       ...props
     } = this.props;
     return (
-      <Player muted autoPlay={autoPlay} playsInline {...props}>
+      <Player
+        key={this.state.key}
+        muted
+        autoPlay={autoPlay}
+        playsInline
+        {...props}>
         <BigPlayButton position="center" />
         <ControlBar autoHide={false}>
           <QualityPicker
@@ -527,11 +551,7 @@ export class Source extends Component {
       this.hls.on(Hls.Events.ERROR, this.onError);
       // console.info('modded chroma2')
       this.debug("attaching media");
-      try {
-        this.hls.attachMedia(video);
-      } catch (e) {
-        console.info("[pabloInfo]", e);
-      }
+      this.hls.attachMedia(video);
     } else if (canPlayHLS) {
       // Handle m3u8 playback natively
       video.removeEventListener("canplay", this.onVideoCanPlay);
@@ -655,11 +675,7 @@ export class Source extends Component {
   onMediaAttached = (e: string, data: Object): void => {
     const { src } = this.props;
     this.debug("loading src", src);
-    try {
-      this.hls.loadSource(src);
-    } catch (e) {
-      console.info("[pabloInfo]", e);
-    }
+    this.hls.loadSource(src);
   };
   /**
    * Called when Hls.Events.MANIFEST_PARSED is triggered
@@ -676,19 +692,15 @@ export class Source extends Component {
     // onLevels(data.levels)
     // this.getLevels()
     this.debug("will load level", this.hls.loadLevel);
+    this.hls.startLoad();
+
     try {
-      this.hls.startLoad();
+      if (autoPlay) await video.play();
     } catch (e) {
-      console.info("[pabloInfo]", e);
+      this.debug("Error when trying to autoplay", e);
     }
-    if (autoPlay) {
-      try {
-        await video.play();
-      } catch (e) {
-        console.info("[pabloInfo]", e);
-      }
-    }
-    onLive(this.props.src, data);
+
+    onLive(data);
   };
   /**
    * Called when Hls.Events.ERROR is triggered
